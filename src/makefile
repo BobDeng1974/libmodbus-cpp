@@ -3,7 +3,7 @@ OJB+=$(patsubst %.cpp, %.o, $(wildcard *.cpp))
 ARCH:=powerpc-e300c3-linux-gnu-
 CC:=$(ARCH)g++
 STRIP:=$(ARCH)strip
-CFLAGS:= -I.. -I.
+CFLAGS:= -I.
 
 all: modbus_server.exe modbus_client.exe
 	@$(STRIP) $+

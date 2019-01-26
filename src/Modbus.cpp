@@ -1,4 +1,6 @@
 #include <string.h>
+#include <unistd.h>
+#include <fcntl.h>
 #include "Modbus.h"
 
 Modbus::Modbus(void)
@@ -36,25 +38,21 @@ bool Modbus::SetTimeout(int msec)
 {
 	return ctx ? (modbus_set_response_timeout(ctx, msec/1000, (msec%1000)*1000)==0) : false;
 }
-bool Modbus::Create(const string& ip, int port, bool debug)
+const uint16_t Modbus::operator[](uint8_t i)const
 {
-	Destroy();
-	if(ctx = modbus_new_tcp(ip.data(), port))
+	if(i < count)
 	{
-		modbus_set_debug(ctx, debug);
-		return modbus_connect(ctx) != -1;
+		switch(fcode)
+		{
+			case MODBUS_FC_READ_COILS:
+			case MODBUS_FC_READ_DISCRETE_INPUTS:
+				return data.bits[i];
+			case MODBUS_FC_READ_HOLDING_REGISTERS:
+			case MODBUS_FC_READ_INPUT_REGISTERS:
+				return data.regs[i&0x7F];
+		}
 	}
-	return false;
-}
-bool Modbus::Create(const string& fname, int baud, int parity, int bsize, int stop, bool debug)
-{
-	Destroy();
-	if(ctx = modbus_new_rtu(fname.data(), baud, parity, bsize, stop))
-	{
-		modbus_set_debug(ctx, debug);
-		return modbus_connect(ctx) != -1;
-	}
-	return false;
+	return uint16_t(0);
 }
 //ModbusClient
 ModbusClient::ModbusClient(const string& ip, int port, bool debug)
@@ -64,6 +62,26 @@ ModbusClient::ModbusClient(const string& ip, int port, bool debug)
 ModbusClient::ModbusClient(const string& fname, int baud, int parity, int bsize, int stop, bool debug)
 {
 	Create(fname, baud, parity, bsize, stop);
+}
+bool ModbusClient::Create(const string& ip, int port, bool debug)
+{
+	Destroy();
+	if(ctx = modbus_new_tcp(ip.data(), port))
+	{
+		modbus_set_debug(ctx, debug);
+		return modbus_connect(ctx) != -1;
+	}
+	return false;
+}
+bool ModbusClient::Create(const string& fname, int baud, int parity, int bsize, int stop, bool debug)
+{
+	Destroy();
+	if(ctx = modbus_new_rtu(fname.data(), baud, parity, bsize, stop))
+	{
+		modbus_set_debug(ctx, debug);
+		return modbus_connect(ctx) != -1;
+	}
+	return false;
 }
 bool ModbusClient::ReadBits(int ioffset, int icount)
 {
@@ -92,22 +110,6 @@ bool ModbusClient::ReadInputRegisters(int ioffset, int icount)
 	count	= icount;
 	fcode   = MODBUS_FC_READ_INPUT_REGISTERS;
 	return ctx ? (modbus_read_input_registers(ctx, offset, count, data.regs)==count) : false;
-}
-const uint16_t ModbusClient::operator[](uint8_t i)const
-{
-	if(i < count)
-	{
-		switch(fcode)
-		{
-			case MODBUS_FC_READ_COILS:
-			case MODBUS_FC_READ_DISCRETE_INPUTS:
-				return data.bits[i];
-			case MODBUS_FC_READ_HOLDING_REGISTERS:
-			case MODBUS_FC_READ_INPUT_REGISTERS:
-				return data.regs[i&0x7F];
-		}
-	}
-	return uint16_t(0);
 }
 //ModbusMapping
 ModbusMapping::ModbusMapping(void)
@@ -181,15 +183,62 @@ uint16_t& ModbusMapping::InputRegister(int i)
 	return nullvalue;
 }
 //ModbusServer
+ModbusServer::~ModbusServer(void)
+{
+	if(ssock != -1)
+	{
+		close(ssock);
+		ssock = -1;
+	}
+}
 ModbusServer::ModbusServer(const string& ip, int port, bool debug)
 {
+	ssock = -1;
 	if(!ip.empty())Create(ip, port, debug);
 }
 ModbusServer::ModbusServer(const string& fname, int baud, int parity, int bsize, int stop, bool debug)
 {
+	ssock = -1;
 	Create(fname, baud, parity, bsize, stop, debug);
+}
+bool ModbusServer::Create(const string& ip, int port, bool debug)
+{
+	if(ssock != -1)
+	{
+		close(ssock);
+		ssock = -1;
+	}
+	Destroy();
+	if(ctx = modbus_new_tcp(ip.data(), port))
+	{
+		ctx->s = -1;
+		modbus_set_debug(ctx, debug);
+		ssock = modbus_tcp_listen(ctx, 1);
+		return	modbus_tcp_accept(ctx, &ssock) != -1;
+	}
+	return false;
+}
+bool ModbusServer::Create(const string& fname, int baud, int parity, int bsize, int stop, bool debug)
+{
+	Destroy();
+	if(ctx = modbus_new_rtu(fname.data(), baud, parity, bsize, stop))
+	{
+		modbus_set_debug(ctx, debug);
+		return modbus_connect(ctx) != -1;
+	}
+	return false;
 }
 int ModbusServer::Receive(void)
 {
-	return modbus_receive(ctx, data.bits);
+	if(NULL == ctx || NULL == mapping)
+	{
+		return -1;
+	}
+	int len = modbus_receive(ctx, data.bits);
+	if(len > 0)
+	{
+		count = uint8_t(len);
+		modbus_reply(ctx, data.bits, len, mapping);
+	}
+	return len;
 }

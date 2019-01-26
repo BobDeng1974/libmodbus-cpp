@@ -13,10 +13,26 @@ int main(int argc, char **argv)
 {
 	ModbusServer TCP("192.168.1.203", 8899, true);
 
-	TCP.SetSlave(17);
+	TCP.Mapping(0, 0x10000, 0, 0x10000, 0, 0x10000, 0, 0x10000);
+	for(int i = 0; i < 0x10000; i++)
+	{
+		TCP.Bit(i) = i % 2;
+		TCP.InputBit(i) = i % 3;
+		TCP.Register(i) = 0xAA;
+		TCP.InputRegister(i) = 0x55;
+	}
 	while(1)
 	{
-		TCP.Receive();
+		int rc = TCP.Receive();
+		for(int i = 0; i < rc; i++)
+		{
+			TCP.fcode = MODBUS_FC_READ_COILS;
+			printf("%02X ", TCP[i]);
+		}
+		if(rc == -1)
+		{
+			TCP.Create("192.168.1.203", 8899, true);
+		}
 		usleep(100);
 	}
 

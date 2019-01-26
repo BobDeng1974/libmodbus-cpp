@@ -1,7 +1,7 @@
 #ifndef __MODBUS_H__
 #define __MODBUS_H__
 #include <string>
-#include "modbus.h"
+#include "modbus-private.h"
 using namespace std;
 
 //ModbusData
@@ -14,8 +14,8 @@ typedef union
 class Modbus
 {
 protected:
-	modbus_t*	ctx;
 	ModbusData	data;
+	struct _modbus* ctx;
 public:
 	uint8_t debug;
 	uint8_t fcode;
@@ -31,23 +31,22 @@ public:
 	bool SetSlave(int);
 	bool SetTimeout(int);
 public:
-	bool Create(const string&, int, bool debug=false);
-	bool Create(const string&, int, int, int, int, bool debug=false);
+	const uint16_t operator[](uint8_t)const;
 };
 //ModbusClient
 class ModbusClient: public Modbus
 {
 public:
-	ModbusClient(const string& ip="", int port=-1, bool debug=false);
+	ModbusClient(const string& ip="", int port=3788, bool debug=false);
 	ModbusClient(const string&, int, int, int, int, bool debug=false);
 public:
+	bool Create(const string&, int port=3788, bool debug=false);
+	bool Create(const string&, int, int, int, int, bool debug=false);
 public:
 	bool ReadBits(int, int);
 	bool ReadInputBits(int, int);
 	bool ReadRegisters(int, int);
 	bool ReadInputRegisters(int, int);
-public:
-	const uint16_t operator[](uint8_t)const;
 };
 class ModbusMapping : public Modbus
 {
@@ -70,9 +69,15 @@ public:
 //ModbusServer
 class ModbusServer : public ModbusMapping 
 {
+protected:
+	int ssock;
 public:
-	ModbusServer(const string& ip="", int port=-1, bool debug=false);
-	ModbusServer(const string&, int, int, int, int, bool debug=false);
+	~ModbusServer(void);
+	ModbusServer(const string& ip="", int port=3788, bool debug=false);
+	ModbusServer(const string&, int baud, int parity, int bsize, int stop, bool debug=false);
+public:
+	bool Create(const string&, int port=3788, bool debug=false);
+	bool Create(const string&, int baud, int parity, int bsize, int stop, bool debug=false);
 public:
 	int Receive(void);
 };

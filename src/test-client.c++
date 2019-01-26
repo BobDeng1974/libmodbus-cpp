@@ -2,6 +2,7 @@
 #include "Modbus.h"
 #include "xstring.h"
 #include "xtime.h"
+#include <errno.h>
 
 #define getinfo(m,s) \
 do{\
@@ -21,11 +22,29 @@ int main(int argc, char **argv)
 	{
 		xtime time;
 		xstring info;
+
 		sendcount++;
-		TCP.SetDebug(1);
-		TCP.SetSlave(9);
-		TCP.ReadBits(0, 10);
-		TCP.ReadRegisters(3, 10);
+		TCP.SetSlave(17);
+		TCP.SetDebug(17);
+		info += xstring("\n%02d: ", TCP.slave);
+		if(TCP.ReadBits(0, 5))
+		{
+			getinfo(TCP, info);
+		}
+		if(TCP.ReadRegisters(3, 6))
+		{
+			getinfo(TCP, info);
+		}
+		else 
+		{
+			switch(errno)
+			{
+				case EBADF:
+				case EPIPE:
+					TCP.Create("192.168.1.203", 8899);
+					break;
+			}
+		}
 		for(int i = 0; i < sizeof(id); i++)
 		{
 			RTU.SetSlave(id[i]);
